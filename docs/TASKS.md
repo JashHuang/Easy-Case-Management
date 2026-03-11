@@ -344,11 +344,11 @@ Goal: file upload support.
 
 ---
 
-## TASK-024 Create Supabase Storage Bucket [DONE]
+## TASK-024 Create R2 Bucket [DONE]
 
 Create bucket:
 
-case-files
+case-files (R2 private)
 
 ---
 
@@ -366,7 +366,7 @@ Allow selecting files.
 
 Upload using:
 
-supabase.storage.from("case-files").upload()
+- signed PUT URL to Cloudflare R2
 
 ---
 
@@ -379,7 +379,8 @@ attachments table.
 Fields:
 
 - case_id
-- file_url
+- storage_provider = r2
+- storage_key
 - file_name
 
 ---
@@ -393,7 +394,22 @@ AttachmentList
 Display:
 
 - file name
-- download link
+- signed download URL from Edge Function
+
+Notes:
+
+- R2 secrets must be configured in Supabase Edge Function environment.
+- Edge functions required:
+  - `attachments-upload-url`
+  - `attachments-download-url`
+  - `attachments-delete`
+
+---
+
+## TASK-028A Delete Attachment (R2) [DONE]
+
+- Adds delete action in attachment list
+- Uses `attachments-delete` edge function
 
 ---
 
@@ -531,3 +547,20 @@ After finishing TASK-001 → TASK-040 the system should support:
 - Attachment uploads
 - Case search
 - Web deployment
+
+---
+
+# Phase 11 — AI Workflow Extension (Paused)
+
+Goal: implement AI-assisted event extraction with mandatory human review.
+
+Current state:
+
+- AI functionality is disabled in the app while architecture changes are underway.
+- Previous AI implementation artifacts have been removed from the runtime path.
+
+---
+
+# AI MVP Complete (Deferred)
+
+AI work is deferred while the architecture is being redesigned.

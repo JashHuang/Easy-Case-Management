@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../services/supabaseClient'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+
+const AUTH_REASON_MESSAGES: Record<string, string> = {
+    profile_timeout: '系統驗證逾時，請重新登入。（代碼：profile_timeout）',
+    profile_unavailable: '系統無法讀取權限資料，請重新登入。（代碼：profile_unavailable）',
+}
 
 export default function Login() {
     const { user } = useAuth()
@@ -9,6 +14,9 @@ export default function Login() {
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
+    const authReason = searchParams.get('reason')
+    const authReasonMessage = authReason ? AUTH_REASON_MESSAGES[authReason] : null
 
     // 反應式導航：當 AuthContext 的 user 狀態更新後自動跳轉
     useEffect(() => {
@@ -37,6 +45,11 @@ export default function Login() {
     return (
         <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-xl shadow-md border border-gray-100">
             <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">登入案件管理系統</h2>
+            {authReasonMessage && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    {authReasonMessage}
+                </div>
+            )}
             <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">電子郵件</label>

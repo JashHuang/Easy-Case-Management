@@ -20,7 +20,7 @@ Database:
 PostgreSQL
 
 Storage:
-Supabase Storage
+Cloudflare R2 (Private)
 
 Deployment:
 Vercel
@@ -31,11 +31,11 @@ Browser
  ↓
 React Frontend
  ↓
-Supabase SDK
+Supabase SDK + Edge Functions
  ↓
-Supabase Platform
-  ├ PostgreSQL Database
-  └ Object Storage
+Supabase Platform (PostgreSQL, Auth)
+ ↓
+Cloudflare R2 (Private Object Storage)
 
 ---
 
@@ -119,22 +119,22 @@ event_id (uuid)
 file_name (text)  
 file_url (text)  
 file_type (text)  
+storage_provider (text)  
+storage_key (text)  
 created_at (timestamp)
 
 ---
 
 # 4. Storage Design
 
-Files stored in Supabase Storage.
+Files stored in Cloudflare R2 (private).
 
 Recommended structure:
 
-case-files/
-
 case-id/
-
-file1.jpg  
-file2.pdf
+  uuid/
+    file1.jpg
+    file2.pdf
 
 ---
 
@@ -172,14 +172,24 @@ Process:
 
 User uploads file
 
-↓  
-Frontend uploads to Supabase Storage
+↓
+Frontend requests signed PUT URL from Supabase Edge Function
 
-↓  
-Get file URL
+↓
+Frontend uploads to R2 via signed URL
 
-↓  
-Insert record into attachments table
+↓
+Insert record into attachments table (storage_key + provider)
+
+# 7.1 File Download Flow
+
+User clicks download/open
+
+↓
+Frontend requests signed GET URL from Supabase Edge Function
+
+↓
+Browser opens or downloads file
 
 ---
 

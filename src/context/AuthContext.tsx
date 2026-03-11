@@ -1,12 +1,15 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../services/supabaseClient'
-import type { User } from '@supabase/supabase-js'
+import type { Session, User } from '@supabase/supabase-js'
 import type { Profile } from '../types/database'
+
+export type AuthErrorCode = 'profile_timeout' | 'profile_unavailable'
 
 interface AuthContextType {
     user: User | null;
     profile: Profile | null;
     loading: boolean;
+    authErrorCode: AuthErrorCode | null;
     isAdmin: boolean;
     isPending: boolean;
     signOut: () => Promise<void>;
@@ -14,87 +17,142 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const PROFILE_LOAD_TIMEOUT_MS = 5000
+const PROFILE_TIMEOUT_TOKEN = 'profile_timeout'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
     const [profile, setProfile] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
+    const [authErrorCode, setAuthErrorCode] = useState<AuthErrorCode | null>(null)
+    const authRequestIdRef = useRef(0)
+    const isMountedRef = useRef(true)
 
-    const fetchProfile = useCallback(async (userId: string) => {
+    const fetchProfileWithTimeout = useCallback(async (userId: string): Promise<{ profile: Profile | null, errorCode: AuthErrorCode | null }> => {
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined
         try {
-            // 使用 maybeSingle 避免找不到資料時拋出錯誤，並設定 timeout
-            const { data, error } = await supabase
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                timeoutHandle = setTimeout(() => {
+                    reject(new Error(PROFILE_TIMEOUT_TOKEN))
+                }, PROFILE_LOAD_TIMEOUT_MS)
+            })
+            const profilePromise = supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle()
 
+            const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as { data: Profile | null, error: { message: string } | null }
+
             if (error) {
-                console.warn('獲取 Profile 出錯 (可能 table 尚未建立):', error.message)
-                return null
+                console.warn('獲取 Profile 出錯:', error.message)
+                return { profile: null, errorCode: 'profile_unavailable' }
             }
-            return data as Profile
+            if (!data) {
+                console.warn('Profile 不存在或尚未建立:', userId)
+                return { profile: null, errorCode: 'profile_unavailable' }
+            }
+
+            return { profile: data as Profile, errorCode: null }
         } catch (err) {
+            if (err instanceof Error && err.message === PROFILE_TIMEOUT_TOKEN) {
+                console.warn('Profile 讀取逾時:', userId)
+                return { profile: null, errorCode: 'profile_timeout' }
+            }
+
             console.error('fetchProfile 異常:', err)
-            return null
+            return { profile: null, errorCode: 'profile_unavailable' }
+        } finally {
+            if (timeoutHandle) clearTimeout(timeoutHandle)
         }
     }, [])
 
-    const refreshProfile = useCallback(async () => {
-        if (user) {
-            const p = await fetchProfile(user.id)
-            setProfile(p)
+    const applySession = useCallback(async (session: Session | null, source: string, options?: { startLoading?: boolean }) => {
+        const requestId = ++authRequestIdRef.current
+
+        if (options?.startLoading) {
+            setLoading(true)
         }
-    }, [user, fetchProfile])
+        setAuthErrorCode(null)
+
+        const currentUser = session?.user ?? null
+
+        if (!currentUser) {
+            if (!isMountedRef.current || requestId !== authRequestIdRef.current) return
+            setUser(null)
+            setProfile(null)
+            setLoading(false)
+            return
+        }
+
+        const { profile: nextProfile, errorCode } = await fetchProfileWithTimeout(currentUser.id)
+        if (!isMountedRef.current || requestId !== authRequestIdRef.current) return
+
+        if (errorCode || !nextProfile) {
+            console.warn(`Auth 初始化失敗 (${source}):`, errorCode ?? 'profile_unavailable')
+            setUser(null)
+            setProfile(null)
+            setAuthErrorCode(errorCode ?? 'profile_unavailable')
+            setLoading(false)
+            return
+        }
+
+        setUser(currentUser)
+        setProfile(nextProfile)
+        setAuthErrorCode(null)
+        setLoading(false)
+    }, [fetchProfileWithTimeout])
+
+    const refreshProfile = useCallback(async () => {
+        const { data, error } = await supabase.auth.getSession()
+        if (error) {
+            console.error('refreshProfile 取得 session 失敗:', error.message)
+            setUser(null)
+            setProfile(null)
+            setAuthErrorCode(null)
+            setLoading(false)
+            return
+        }
+
+        await applySession(data.session ?? null, 'REFRESH_PROFILE')
+    }, [applySession])
 
     useEffect(() => {
-        let mounted = true;
+        isMountedRef.current = true
 
-        // Supabase 的 onAuthStateChange 訂閱後會立即觸發 INITIAL_SESSION，
-        // 包含目前的 session 狀態，因此不需要另外呼叫 getSession。
-        // 統一由此處管理 user、profile、loading，確保狀態不會競態衝突。
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (!mounted) return;
-
-            console.log('Auth 事件觸發:', event)
-            const currentUser = session?.user ?? null
-
-            // 先同步更新 user
-            setUser(currentUser)
-
-            if (currentUser) {
-                // 取得 profile 後才將 loading 設為 false
-                const p = await fetchProfile(currentUser.id)
-                if (!mounted) return;
-                setProfile(p)
-            } else {
-                setProfile(null)
-            }
-
-            // profile 已就緒，關閉 loading
-            if (mounted) setLoading(false)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            void applySession(session, event)
         })
 
-        // 安全機制：若 10 秒內 onAuthStateChange 都沒觸發（極端情況），強制解除 loading
-        const safetyTimer = setTimeout(() => {
-            if (mounted) {
-                console.warn('驗證初始化超過 10 秒，強行解除載入狀態。')
+        void (async () => {
+            const { data, error } = await supabase.auth.getSession()
+            if (!isMountedRef.current) return
+
+            if (error) {
+                console.error('Auth bootstrap getSession 失敗:', error.message)
+                setUser(null)
+                setProfile(null)
+                setAuthErrorCode(null)
                 setLoading(false)
+                return
             }
-        }, 10000);
+
+            await applySession(data.session ?? null, 'BOOTSTRAP', { startLoading: true })
+        })()
 
         return () => {
-            mounted = false;
+            isMountedRef.current = false
             subscription.unsubscribe()
-            clearTimeout(safetyTimer)
         }
-    }, [fetchProfile])
+    }, [applySession])
 
     const signOut = async () => {
         try {
             await supabase.auth.signOut()
             setProfile(null)
             setUser(null)
+            setAuthErrorCode(null)
+            setLoading(false)
         } catch (err) {
             console.error('登出失敗:', err)
         }
@@ -104,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         profile,
         loading,
+        authErrorCode,
         isAdmin: profile?.role === 'admin',
         isPending: profile?.status === 'pending',
         signOut,

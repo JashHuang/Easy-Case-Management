@@ -32,6 +32,7 @@
 - **路由管理**：[React Router DOM v7](https://reactrouter.com/)
 - **樣式與 UI**：[Tailwind CSS v4](https://tailwindcss.com/) + [@heroicons/react](https://heroicons.com/)
 - **後端與資料庫**：[Supabase](https://supabase.com/) (PostgreSQL 關聯式資料庫 + 身分驗證機制)
+- **檔案儲存**：Cloudflare R2 (Private)
 - **日期處理**：[date-fns](https://date-fns.org/)
 
 ---
@@ -48,6 +49,15 @@ src/
 ├── utils/            # 共用工具函式 (seedDatabase.ts, 等)
 ├── App.tsx           # 應用程式主進入點與路由配置
 └── main.tsx          # React 掛載點
+
+docs/
+├── PRD.md           #產品需求文件
+├── TechDesign.md    #技術設計文件
+├── AI Agent Workflow.md # AI工作流程規範
+├── TASKS.md         #開發任務清單
+├── AI Implementation Plan.md # AI實施計畫
+├── AI Workflow Integration.md # AI工作流程整合指南
+└── DOCUMENTATION.md #文件索引
 ```
 
 ---
@@ -81,6 +91,44 @@ VITE_SUPABASE_ANON_KEY=你的_SUPABASE_ANON_KEY
 ```
 
 > **注意**：請確保配置好 Supabase 中的 Database 表格 (如 `cases`, `profiles`, `case_events` 等) 以及 Row Level Security (RLS) 規則，以確保功能正常運作。
+
+### 3.1 Cloudflare R2 (Private) 設定
+
+檔案上傳/下載改由 Supabase Edge Function 產生 R2 signed URL。請在 Supabase 專案設定中加入下列 Secrets：
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+
+必需 Secrets（用於 Edge Function）：上述四個必填。
+
+#### R2 CORS 設定（必需）
+
+R2 是 private bucket，前端會直接用 signed PUT/GET URL 存取，因此必須在 R2 bucket 設定 CORS。
+
+範例（請將 `https://your-domain.com` 換成正式網域，並保留 `http://localhost:5173` 作為本地開發）：
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://your-domain.com", "http://localhost:5173"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag", "Content-Length"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+部署 Edge Functions：
+
+```bash
+npx supabase functions deploy attachments-upload-url
+npx supabase functions deploy attachments-download-url
+npx supabase functions deploy attachments-delete
+```
+
+遷移參考：`docs/R2_MIGRATION_GUIDE.md`
 
 ### 4. 啟動開發伺服器
 

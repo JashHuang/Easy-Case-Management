@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import type { Case, CaseEvent, Attachment } from '../types/database'
+import type { Attachment, Case, CaseEvent } from '../types/database'
 import { format } from 'date-fns'
 import Timeline from '../components/Timeline'
 import EventForm from '../components/EventForm'
@@ -17,7 +17,6 @@ export default function CaseDetail() {
     const [error, setError] = useState<string | null>(null)
     const [showAddEvent, setShowAddEvent] = useState(false)
     const [editingEvent, setEditingEvent] = useState<CaseEvent | null>(null)
-
 
     const fetchCaseDetail = useCallback(async () => {
         if (!id) return
@@ -50,7 +49,6 @@ export default function CaseDetail() {
 
             if (attachmentsError) throw attachmentsError
             setAttachments(attachmentsResult || [])
-
         } catch (err: any) {
             setError(err.message)
         } finally {
@@ -73,21 +71,20 @@ export default function CaseDetail() {
     }
 
     const handleDeleteEvent = async (eventId: string) => {
-        if (!confirm('確定要刪除此事件嗎？')) return;
+        if (!confirm('確定要刪除此事件嗎？')) return
 
         try {
-            const { error } = await supabase
+            const { error: deleteError } = await supabase
                 .from('events')
                 .delete()
-                .eq('id', eventId);
+                .eq('id', eventId)
 
-            if (error) throw error;
-            handleRefresh();
+            if (deleteError) throw deleteError
+            handleRefresh()
         } catch (err: any) {
-            alert('刪除事件失敗: ' + err.message);
+            alert('刪除事件失敗: ' + err.message)
         }
-    };
-
+    }
 
     if (loading) {
         return (
@@ -120,8 +117,7 @@ export default function CaseDetail() {
                     <h1 className="text-3xl font-bold text-gray-900">{caseData.title}</h1>
                     <p className="text-lg text-gray-500 mt-1">{caseData.name}</p>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${caseData.status === 'open' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
+                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${caseData.status === 'open' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                     {caseData.status === 'open' ? '開啟中' : '已結案'}
                 </div>
             </div>
@@ -175,7 +171,6 @@ export default function CaseDetail() {
                             onEdit={setEditingEvent}
                             onDelete={handleDeleteEvent}
                         />
-
                     </section>
                 </div>
 
@@ -200,7 +195,7 @@ export default function CaseDetail() {
 
                     <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 border-b pb-2">附件列表</h2>
-                        <AttachmentList attachments={attachments} />
+                        <AttachmentList attachments={attachments} onDeleted={handleRefresh} />
                         <FileUploader caseId={caseData.id} onSuccess={handleRefresh} />
                     </div>
                 </div>

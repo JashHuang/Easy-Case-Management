@@ -11,13 +11,14 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 /**
  * 路由保護元元件
  */
-function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
-  const { user, isAdmin, isPending, loading } = useAuth()
+export function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
+  const { user, isAdmin, isPending, loading, authErrorCode } = useAuth()
 
   if (loading) return <div>載入中...</div>
-  if (!user) return <Navigate to="/login" />
-  if (isPending) return <Navigate to="/pending" />
-  if (adminOnly && !isAdmin) return <Navigate to="/cases" />
+  if (authErrorCode) return <Navigate to={`/login?reason=${encodeURIComponent(authErrorCode)}`} replace />
+  if (!user) return <Navigate to="/login" replace />
+  if (isPending) return <Navigate to="/pending" replace />
+  if (adminOnly && !isAdmin) return <Navigate to="/cases" replace />
 
   return <>{children}</>
 }
