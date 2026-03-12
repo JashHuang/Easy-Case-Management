@@ -3,6 +3,32 @@ import type { Case } from '../types/database'
 import { format } from 'date-fns'
 import { TrashIcon } from '@heroicons/react/24/outline'
 
+const STATUS_LABEL_MAP: Record<string, string> = {
+    open: '開啟中',
+    closed: '已結案',
+    pending: '待處理',
+    delayed: '延遲中',
+}
+
+const LEGACY_STATUS_MAP: Record<string, string> = {
+    進行中: 'open',
+    已結案: 'closed',
+    待處理: 'pending',
+    延遲中: 'delayed',
+}
+
+const STATUS_CLASS_MAP: Record<string, string> = {
+    open: 'bg-green-100 text-green-800',
+    closed: 'bg-gray-100 text-gray-800',
+    pending: 'bg-amber-100 text-amber-800',
+    delayed: 'bg-red-100 text-red-800',
+}
+
+const normalizeStatus = (status: string) => {
+    if (STATUS_LABEL_MAP[status]) return status
+    return LEGACY_STATUS_MAP[status] || status
+}
+
 interface CaseCardProps {
     caseData: Case;
     isAdmin?: boolean;
@@ -12,6 +38,10 @@ interface CaseCardProps {
 }
 
 export default function CaseCard({ caseData, isAdmin, isSelected, onSelect, onDelete }: CaseCardProps) {
+    const normalizedStatus = normalizeStatus(caseData.status)
+    const statusLabel = STATUS_LABEL_MAP[normalizedStatus] || caseData.status
+    const statusClass = STATUS_CLASS_MAP[normalizedStatus] || 'bg-blue-100 text-blue-800'
+
     return (
         <div className="relative group bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
             {isAdmin && (
@@ -30,9 +60,8 @@ export default function CaseCard({ caseData, isAdmin, isSelected, onSelect, onDe
             >
                 <div className="flex justify-between items-start mb-2">
                     <h2 className="text-xl font-semibold text-gray-900">{caseData.name}</h2>
-                    <span className={`px-2 py-1 text-xs font-semibold rounded ${caseData.status === 'open' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                        {caseData.status === 'open' ? '開啟中' : '已結案'}
+                    <span className={`px-2 py-1 text-xs font-semibold rounded ${statusClass}`}>
+                        {statusLabel}
                     </span>
                 </div>
                 <p className="text-md text-blue-600 font-medium mb-3">{caseData.title}</p>

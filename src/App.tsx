@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom'
 import CaseList from './pages/CaseList'
 import CaseDetail from './pages/CaseDetail'
@@ -25,6 +26,29 @@ export function ProtectedRoute({ children, adminOnly = false }: { children: Reac
 
 function MainLayout() {
   const { user, profile, isAdmin, isPending, signOut } = useAuth()
+  const [fontScale, setFontScale] = useState(() => {
+    try {
+      const stored = localStorage.getItem('app_font_scale')
+      const parsed = stored ? Number(stored) : NaN
+      return Number.isFinite(parsed) ? parsed : 1
+    } catch {
+      return 1
+    }
+  })
+
+  const minScale = 0.85
+  const maxScale = 3
+  const step = 0.05
+
+  useEffect(() => {
+    const baseSize = 16
+    document.documentElement.style.fontSize = `${baseSize * fontScale}px`
+    try {
+      localStorage.setItem('app_font_scale', String(fontScale))
+    } catch {
+      // ignore storage errors
+    }
+  }, [fontScale])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -44,6 +68,35 @@ function MainLayout() {
           </div>
 
           <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 border border-gray-200 rounded-lg px-2 py-1 text-sm text-gray-600">
+              <span className="text-xs text-gray-500">字體</span>
+              <button
+                type="button"
+                onClick={() => setFontScale((value) => Math.max(minScale, Number((value - step).toFixed(2))))}
+                disabled={fontScale <= minScale}
+                className="px-2 py-1 rounded-md hover:bg-gray-100 disabled:opacity-40"
+                aria-label="縮小字體"
+              >
+                A-
+              </button>
+              <button
+                type="button"
+                onClick={() => setFontScale(1)}
+                className="px-2 py-1 rounded-md hover:bg-gray-100"
+                aria-label="重設字體大小"
+              >
+                {Math.round(fontScale * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setFontScale((value) => Math.min(maxScale, Number((value + step).toFixed(2))))}
+                disabled={fontScale >= maxScale}
+                className="px-2 py-1 rounded-md hover:bg-gray-100 disabled:opacity-40"
+                aria-label="放大字體"
+              >
+                A+
+              </button>
+            </div>
             {user ? (
               <>
                 <div className="text-sm text-right hidden sm:block">
